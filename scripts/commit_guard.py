@@ -34,8 +34,11 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 HOOKS_DIR = "scripts/git-hooks"
 
-# The only identity allowed to author OR commit in this repository.
-EXPECTED_IDENTITY = "Eurus <t.hoang7895@gmail.com>"
+# Commits are authored and committed by the human user the work is for, with
+# their GitHub no-reply address: `Name <id+login@users.noreply.github.com>`.
+# The repository is public, so a private email must never land in history.
+NOREPLY_IDENTITY = re.compile(r"^.+ <\d+\+[A-Za-z0-9-]+@users\.noreply\.github\.com>$")
+EXPECTED_IDENTITY = "<name> <id+login@users.noreply.github.com>"
 
 # A 40-zero sha is git's "this ref does not exist" sentinel: on the local
 # side it means a branch deletion, on the remote side a brand-new branch.
@@ -91,11 +94,16 @@ def check_commit(sha: str, author: str, committer: str, message: str) -> list[st
     Pure: takes the commit's fields, touches no git state."""
     short = sha[:9]
     problems: list[str] = []
-    if author != EXPECTED_IDENTITY:
+    if not NOREPLY_IDENTITY.match(author):
         problems.append(f"{short} author is {author!r}, expected {EXPECTED_IDENTITY!r}")
-    if committer != EXPECTED_IDENTITY:
+    if not NOREPLY_IDENTITY.match(committer):
         problems.append(
             f"{short} committer is {committer!r}, expected {EXPECTED_IDENTITY!r}",
+        )
+    elif committer != author and NOREPLY_IDENTITY.match(author):
+        problems.append(
+            f"{short} committer {committer!r} differs from author {author!r}; "
+            "both must be the same user",
         )
     for label, pattern in _ATTRIBUTION_PATTERNS:
         if pattern.search(message):
@@ -188,9 +196,10 @@ def main(argv: list[str]) -> int:
     print(
         "\nFix the commits, do not bypass. To correct author/committer on the\n"
         "whole branch without touching git config:\n"
-        "  GIT_COMMITTER_NAME='Eurus' GIT_COMMITTER_EMAIL='t.hoang7895@gmail.com' \\\n"
-        "  git -c user.name='Eurus' -c user.email='t.hoang7895@gmail.com' \\\n"
-        "      rebase -f --onto origin/dev origin/dev <branch>",
+        "  GIT_AUTHOR_NAME='<name>' GIT_AUTHOR_EMAIL='<no-reply>' \\\n"
+        "  GIT_COMMITTER_NAME='<name>' GIT_COMMITTER_EMAIL='<no-reply>' \\\n"
+        "  git rebase -f --onto origin/dev origin/dev <branch> \\\n"
+        "      --exec 'git commit --amend --no-edit --reset-author'",
         file=sys.stderr,
     )
     return 1

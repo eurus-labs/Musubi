@@ -80,9 +80,9 @@ Use Problem → Design → Predict → Build → Validate → Learn.
 
 ## Branches and Commits — Read Before Every Git Command
 
-- Use `Eurus <t.hoang7895@gmail.com>` for both author and committer.
+- Commit as the human user you work for: their name and GitHub no-reply address (`<id>+<login>@users.noreply.github.com`) for both author and committer. Take it from the user or from the latest no-reply author on `origin/dev`; ask if it is unclear. Never use a private email: this repository is public.
 - Never persist `user.name` or `user.email` with `git config`.
-- Use command-scoped identity flags for commits, rebases, cherry-picks, and amends: `git -c user.name='Eurus' -c user.email='t.hoang7895@gmail.com' commit ...`
+- Set the identity as environment variables on every command that writes a commit (commit, rebase, cherry-pick, amend): `GIT_AUTHOR_NAME='<name>' GIT_AUTHOR_EMAIL='<no-reply>' GIT_COMMITTER_NAME='<name>' GIT_COMMITTER_EMAIL='<no-reply>' git commit ...`. The environment may preset `GIT_AUTHOR_EMAIL` to a private address, and it wins over `-c user.email`.
 - Never add AI/tool attribution, co-author/session trailers, generated-by footers, or AI session links to commits, PRs, comments, or documents.
 - Never push to `claude/*`; never put `codex` or `claude` in branch names or PR titles.
 - Name branches `<type>/<area>-<outcome>` in lowercase kebab-case, using a Conventional Commits type; no session suffixes or tool prefixes.

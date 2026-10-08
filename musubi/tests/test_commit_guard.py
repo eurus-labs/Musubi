@@ -23,7 +23,7 @@ if str(_SCRIPTS_DIR) not in sys.path:
 
 import commit_guard  # noqa: E402
 
-GOOD = commit_guard.EXPECTED_IDENTITY
+GOOD = "Jane Doe <1234567+janedoe@users.noreply.github.com>"
 BAD = "Claude <noreply@anthropic.com>"
 SHA = "d8ea3450846abe5fdc26e88673ef659c4b400976"
 
@@ -51,6 +51,20 @@ def test_wrong_author_is_reported() -> None:
 
 def test_both_identities_wrong_are_reported_separately() -> None:
     assert len(commit_guard.check_commit(SHA, BAD, BAD, "fix: x")) == 2
+
+
+def test_private_email_is_reported() -> None:
+    private = "Jane Doe <jane@gmail.com>"
+    problems = commit_guard.check_commit(SHA, private, private, "fix: x")
+    assert len(problems) == 2
+    assert all("no-reply" in p or "noreply" in p for p in problems)
+
+
+def test_author_and_committer_must_be_the_same_user() -> None:
+    other = "John Roe <7654321+johnroe@users.noreply.github.com>"
+    problems = commit_guard.check_commit(SHA, GOOD, other, "fix: x")
+    assert len(problems) == 1
+    assert "differs from author" in problems[0]
 
 
 def test_report_names_the_offending_commit() -> None:
@@ -128,6 +142,14 @@ def test_parse_commits_handles_empty_output() -> None:
 
 # ── end to end, through a throwaway repository ───────────────────────────────
 
+@pytest.fixture(autouse=True)
+def _no_ambient_git_identity(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A harness may preset GIT_AUTHOR_* (cloud sessions use a private email), and
+    # those win over the `-c user.*` flags these tests pass, so clear them.
+    for var in ("GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_NAME", "GIT_COMMITTER_EMAIL"):
+        monkeypatch.delenv(var, raising=False)
+
+
 def _run_git(repo: Path, *args: str, env: dict | None = None) -> subprocess.CompletedProcess:
     return subprocess.run(
         ["git", *args], cwd=repo, capture_output=True, text=True, check=True, env=env,
@@ -167,7 +189,7 @@ def _push(repo: Path, branch: str) -> subprocess.CompletedProcess:
 
 def test_hook_allows_a_clean_push(repo_with_hook: tuple[Path, Path]) -> None:
     work, _ = repo_with_hook
-    _commit(work, "one", name="Eurus", email="t.hoang7895@gmail.com", message="feat(x): add y")
+    _commit(work, "one", name="Jane Doe", email="1234567+janedoe@users.noreply.github.com", message="feat(x): add y")
 
     result = _push(work, "dev")
 
@@ -191,7 +213,7 @@ def test_hook_refuses_an_attribution_trailer(repo_with_hook: tuple[Path, Path]) 
     work, _ = repo_with_hook
     _commit(
         work, "one",
-        name="Eurus", email="t.hoang7895@gmail.com",
+        name="Jane Doe", email="1234567+janedoe@users.noreply.github.com",
         message="feat(x): add y\n\nCo-Authored-By: Claude <noreply@anthropic.com>",
     )
 
@@ -203,7 +225,7 @@ def test_hook_refuses_an_attribution_trailer(repo_with_hook: tuple[Path, Path]) 
 
 def test_hook_refuses_a_tool_named_branch(repo_with_hook: tuple[Path, Path]) -> None:
     work, _ = repo_with_hook
-    _commit(work, "one", name="Eurus", email="t.hoang7895@gmail.com", message="feat(x): add y")
+    _commit(work, "one", name="Jane Doe", email="1234567+janedoe@users.noreply.github.com", message="feat(x): add y")
     _run_git(work, "switch", "-q", "-c", "claude/scratch-1")
 
     result = _push(work, "claude/scratch-1")
@@ -219,7 +241,7 @@ def test_hook_checks_only_the_commits_being_pushed(repo_with_hook: tuple[Path, P
     every push and permanently wedge the branch.
     """
     work, _ = repo_with_hook
-    _commit(work, "one", name="Eurus", email="t.hoang7895@gmail.com", message="feat(x): one")
+    _commit(work, "one", name="Jane Doe", email="1234567+janedoe@users.noreply.github.com", message="feat(x): one")
     assert _push(work, "dev").returncode == 0
 
     # A commit that violates the rules, force-landed past the hook.
@@ -229,7 +251,7 @@ def test_hook_checks_only_the_commits_being_pushed(repo_with_hook: tuple[Path, P
         cwd=work, capture_output=True, text=True,
     ).returncode == 0
 
-    _commit(work, "three", name="Eurus", email="t.hoang7895@gmail.com", message="feat(x): three")
+    _commit(work, "three", name="Jane Doe", email="1234567+janedoe@users.noreply.github.com", message="feat(x): three")
 
     result = _push(work, "dev")
 
@@ -262,7 +284,7 @@ def test_a_rebase_onto_a_moved_base_checks_only_the_rebased_commits(
     bypassed.
     """
     work, _ = repo_with_hook
-    good = {"name": "Eurus", "email": "t.hoang7895@gmail.com"}
+    good = {"name": "Jane Doe", "email": "1234567+janedoe@users.noreply.github.com"}
 
     _commit_file(work, "base.txt", message="feat(x): base", **good)
     assert _push(work, "dev").returncode == 0
@@ -277,8 +299,8 @@ def test_a_rebase_onto_a_moved_base_checks_only_the_rebased_commits(
     # a push of OURS; the point is what happens once it is already published.
     _run_git(work, "checkout", "-q", "dev")
     _commit_file(
-        work, "theirs.txt", name="Eurus",
-        email="56497078+Eurus7895@users.noreply.github.com",
+        work, "theirs.txt", name="GitHub",
+        email="noreply@github.com",
         message="Merge pull request #1 from somewhere",
     )
     assert subprocess.run(
@@ -289,7 +311,8 @@ def test_a_rebase_onto_a_moved_base_checks_only_the_rebased_commits(
     # Rebasing our branch onto it must still push.
     _run_git(work, "checkout", "-q", "feat/thing")
     _run_git(
-        work, "-c", "user.name=Eurus", "-c", "user.email=t.hoang7895@gmail.com",
+        work, "-c", "user.name=Jane Doe",
+        "-c", "user.email=1234567+janedoe@users.noreply.github.com",
         "rebase", "dev",
     )
     result = subprocess.run(
@@ -298,7 +321,7 @@ def test_a_rebase_onto_a_moved_base_checks_only_the_rebased_commits(
     )
 
     assert result.returncode == 0, result.stderr
-    assert "expected 'Eurus <t.hoang7895@gmail.com>'" not in result.stderr
+    assert "committer is" not in result.stderr and "author is" not in result.stderr
 
 
 def test_a_bad_commit_of_ours_is_still_caught_after_a_rebase(
@@ -307,8 +330,8 @@ def test_a_bad_commit_of_ours_is_still_caught_after_a_rebase(
     # The narrower range must not become a hole: our own commits are still
     # checked, whatever the base did.
     work, _ = repo_with_hook
-    _commit_file(work, "base.txt", name="Eurus",
-                 email="t.hoang7895@gmail.com", message="feat(x): base")
+    _commit_file(work, "base.txt", name="Jane Doe",
+                 email="1234567+janedoe@users.noreply.github.com", message="feat(x): base")
     assert _push(work, "dev").returncode == 0
 
     _run_git(work, "checkout", "-q", "-b", "feat/other")
@@ -318,4 +341,4 @@ def test_a_bad_commit_of_ours_is_still_caught_after_a_rebase(
     result = _push(work, "feat/other")
 
     assert result.returncode != 0
-    assert "expected 'Eurus <t.hoang7895@gmail.com>'" in result.stderr
+    assert "other@example.com" in result.stderr

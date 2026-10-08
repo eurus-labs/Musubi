@@ -169,3 +169,26 @@ jobs:
         # Tests marked `todo` document known defects and report without
         # failing the run.
         run: npm test
+
+  # ────────────────────────────────────────────────────────────────────
+  # Gate — the one check a branch ruleset should require
+  # ────────────────────────────────────────────────────────────────────
+  # Its name stays fixed as jobs are added or renamed, so the ruleset never
+  # waits on a check that no longer runs. Add every new job to needs.
+  # always(): a failed job would otherwise make this one "skipped", and
+  # GitHub counts a skipped required check as passing.
+  verify:
+    if: always()
+    needs: [python, rust, console-js]
+    runs-on: ubuntu-latest
+    # Reads only the results of the jobs above: it needs no token at all.
+    permissions: {}
+    steps:
+      - name: Every job passed
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "results: $RESULTS"
+          for result in $RESULTS; do
+            [ "$result" = success ] || exit 1
+          done
