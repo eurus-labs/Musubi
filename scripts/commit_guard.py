@@ -198,7 +198,8 @@ def main(argv: list[str]) -> int:
         "whole branch without touching git config:\n"
         "  GIT_AUTHOR_NAME='<name>' GIT_AUTHOR_EMAIL='<no-reply>' \\\n"
         "  GIT_COMMITTER_NAME='<name>' GIT_COMMITTER_EMAIL='<no-reply>' \\\n"
-        "      rebase -f --onto origin/dev origin/dev <branch>",
+        "  git rebase -f --onto origin/dev origin/dev <branch> \\\n"
+        "      --exec 'git commit --amend --no-edit --reset-author'",
         file=sys.stderr,
     )
     return 1

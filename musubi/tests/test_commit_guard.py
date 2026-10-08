@@ -142,6 +142,14 @@ def test_parse_commits_handles_empty_output() -> None:
 
 # ── end to end, through a throwaway repository ───────────────────────────────
 
+@pytest.fixture(autouse=True)
+def _no_ambient_git_identity(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A harness may preset GIT_AUTHOR_* (cloud sessions use a private email), and
+    # those win over the `-c user.*` flags these tests pass, so clear them.
+    for var in ("GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_NAME", "GIT_COMMITTER_EMAIL"):
+        monkeypatch.delenv(var, raising=False)
+
+
 def _run_git(repo: Path, *args: str, env: dict | None = None) -> subprocess.CompletedProcess:
     return subprocess.run(
         ["git", *args], cwd=repo, capture_output=True, text=True, check=True, env=env,
